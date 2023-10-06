@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "sqlmodel-celery-beat"
+version = "0.1.0"
+description = "A SQLModel based scheduler for Celery"
+authors = ["Your Name <you@example.com>"]
+license = "MIT"
+readme = "README.md"
+packages = [{include = "sqlmodel_celery_beat"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+celery = "^5.3.1"
+sqlmodel = "^0.0.8"
+psycopg2-binary = "^2.9.6"
+cron-descriptor = "^1.4.0"
+
+
+[tool.poetry.group.dev.dependencies]
+black = "^23.7.0"
+pytest = "^7.4.0"
+python-dotenv = "^1.0.0"
+pre-commit = "^3.3.3"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
