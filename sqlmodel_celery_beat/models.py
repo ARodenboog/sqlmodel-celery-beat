@@ -1,5 +1,6 @@
 from enum import Enum
 from typing import Optional
+from zoneinfo import ZoneInfo
 from celery import current_app
 from cron_descriptor import (
     FormatException,
@@ -9,6 +10,7 @@ from cron_descriptor import (
 )
 from pydantic import ValidationError, root_validator, validator
 import sqlalchemy as sa
+from sqlalchemy.event import listen
 from sqlmodel import Relationship, SQLModel, Field, Session, select
 from celery import schedules
 from datetime import timedelta, datetime
@@ -173,6 +175,7 @@ class CrontabSchedule(ModelMixin, table=True):
     day_of_week: str = Field(max_length=64, default="*")
     day_of_month: str = Field(max_length=31 * 4, default="*")
     month_of_year: str = Field(max_length=64, default="*")
+    timezone: str = Field(max_length=64, default="UTC")
     periodic_task: Optional["PeriodicTask"] = Relationship(back_populates="crontab")
 
     @property
@@ -187,8 +190,8 @@ class CrontabSchedule(ModelMixin, table=True):
         try:
             human_readable = get_description(cron_expression)
         except (MissingFieldException, FormatException, WrongArgumentException):
-            return f"{cron_expression} {str(self.timezone)}"
-        return f"{human_readable} {str(self.timezone)}"
+            return f"{cron_expression} {self.timezone}"
+        return f"{human_readable} {self.timezone}"
 
     def __str__(self):
         return "{} {} {} {} {} (m/h/dM/MY/d) {}".format(
@@ -216,7 +219,7 @@ class CrontabSchedule(ModelMixin, table=True):
                 day_of_week=self.day_of_week,
                 day_of_month=self.day_of_month,
                 month_of_year=self.month_of_year,
-                tz=self.timezone,
+                tz=ZoneInfo(self.timezone),
             )
         return crontab
 
@@ -238,35 +241,55 @@ class CrontabSchedule(ModelMixin, table=True):
             return session.exec(select(cls), **spec).first()
 
 
-class PeriodicTasksChanged(ModelMixin, table=True):
+class PeriodicTasksChanged(SQLModel, table=True):
     """Helper table for tracking updates to periodic tasks.
 
-    This stores a single row with ``ident=1``. ``last_update`` is updated via
+    This stores a single row with ``id=1``. ``last_update`` is updated via
     signals whenever anything changes in the :class:`~.PeriodicTask` model.
     Basically this acts like a DB data audit trigger.
     Doing this so we also track deletions, and not just insert/update.
     """
 
-    ident: int = Field(default=1, primary_key=True)
+    id: int = Field(primary_key=True)
     last_update: datetime = Field(
         sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
         default=nowfun(),
     )
 
     @classmethod
-    def changed(cls, session: Session, instance, **kwargs):
-        # TODO: Check how this works with sqlalchemy
-        if not instance.no_changes:
-            cls.update_changed()
+    def changed(cls, mapper, connection, target):
+        """
+        :param mapper: the Mapper which is the target of this event
+        :param connection: the Connection being used
+        :param target: the mapped instance being persisted
+        """
+        if not target.no_changes:
+            cls.update_changed(mapper, connection, target)
+
 
     @classmethod
-    def update_changed(cls, session: Session, **kwargs):
-        cls.objects.update_or_create(ident=1, defaults={"last_update": nowfun()})
+    def update_changed(cls, mapper, connection, target):
+        """
+        :param mapper: the Mapper which is the target of this event
+        :param connection: the Connection being used
+        :param target: the mapped instance being persisted
+        """
+        row = connection.execute(select(cls).where(cls.id == 1)).first()
+        if row is None:
+            connection.execute(
+                sa.insert(cls).values(id=1, last_update=nowfun())
+            )
+        else:
+            connection.execute(
+                sa.update(cls)
+                .where(cls.id == 1)
+                .values(last_update=nowfun())
+            )
 
     @classmethod
     def last_change(cls, session: Session) -> Optional[datetime]:
         try:
-            return session.get(cls, ident=1).last_update
+            return session.get(cls, 1).last_update
         except sa.orm.exc.NoResultFound:
             pass
 
@@ -313,7 +336,7 @@ class PeriodicTask(ModelMixin, table=True):
     )
     description: str = Field(max_length=200, nullable=True)
 
-    no_changes: bool = False
+    no_changes: bool = True
 
     @root_validator
     def validate_unique(cls, values: dict):
@@ -345,17 +368,6 @@ class PeriodicTask(ModelMixin, table=True):
                 'Only one can be set, in expires and expire_seconds'
             )
 
-
-    def save(self, session: Session, *args, **kwargs):
-        if not self.enabled:
-            self.last_run_at = None
-        session.add(self)
-        session.commit()
-        PeriodicTasksChanged.changed(self)
-
-    def delete(self, session: Session, *args, **kwargs):
-        session.delete(self)
-        PeriodicTasksChanged.changed(self)
 
     @property
     def expires_(self):
@@ -389,3 +401,16 @@ class PeriodicTask(ModelMixin, table=True):
     @property
     def schedule(self):
         return self.scheduler.schedule
+
+listen(PeriodicTask, 'after_insert', PeriodicTasksChanged.update_changed)
+listen(PeriodicTask, 'after_delete', PeriodicTasksChanged.update_changed)
+listen(PeriodicTask, 'after_update', PeriodicTasksChanged.changed)
+listen(IntervalSchedule, 'after_insert', PeriodicTasksChanged.update_changed)
+listen(IntervalSchedule, 'after_delete', PeriodicTasksChanged.update_changed)
+listen(IntervalSchedule, 'after_update', PeriodicTasksChanged.update_changed)
+listen(CrontabSchedule, 'after_insert', PeriodicTasksChanged.update_changed)
+listen(CrontabSchedule, 'after_delete', PeriodicTasksChanged.update_changed)
+listen(CrontabSchedule, 'after_update', PeriodicTasksChanged.update_changed)
+listen(SolarSchedule, 'after_insert', PeriodicTasksChanged.update_changed)
+listen(SolarSchedule, 'after_delete', PeriodicTasksChanged.update_changed)
+listen(SolarSchedule, 'after_update', PeriodicTasksChanged.update_changed)

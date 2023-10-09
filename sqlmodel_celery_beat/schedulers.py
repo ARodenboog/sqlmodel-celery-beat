@@ -54,8 +54,8 @@ class ModelEntry(ScheduleEntry):
         self.task = model.task
         self.schedule = model.schedule
         try:
-            self.args = loads(model.args or "[]")
-            self.kwargs = loads(model.kwargs or "{}")
+            self.args = model.args
+            self.kwargs = model.kwargs
         except ValueError as exc:
             logging.exception(
                 "Removing schedule %s for argument deseralization error: %r",
@@ -240,8 +240,18 @@ class DatabaseScheduler(Scheduler):
         return s
 
     def schedule_changed(self):
-        # TODO: check if schedule has changed in database
-        pass
+        with self.get_session() as session:
+            changes = session.get(PeriodicTasksChanged, 1)
+            if not changes:
+                session.add(PeriodicTasksChanged(id=1))
+                session.commit()
+                return False
+            last, ts = self._last_timestamp, changes.last_update
+            if ts and ts > (last if last else ts):
+                self._last_timestamp = ts
+                return True
+        self._last_timestamp = ts
+        return False
 
     def reserve(self, entry):
         new_entry = next(entry)
