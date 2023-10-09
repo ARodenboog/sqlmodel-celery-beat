@@ -199,9 +199,6 @@ class DatabaseScheduler(Scheduler):
     def __init__(self, dburi: str | None = None, *args, **kwargs):
         """Initialize the database scheduler."""
         self._dirty = set()
-        self.dburi = dburi or self.app.conf.beat_dburi
-        self.engine = create_engine(self.dburi)
-
         Scheduler.__init__(self, *args, **kwargs)
         self._finalize = Finalize(self, self.sync, exitpriority=5)
         self.max_interval = (
@@ -209,6 +206,9 @@ class DatabaseScheduler(Scheduler):
             or self.app.conf.beat_max_loop_interval
             or DEFAULT_MAX_INTERVAL
         )
+        self.dburi = dburi or self.app.conf.beat_dburi
+        self.engine = create_engine(self.dburi)
+
 
     def get_session(self) -> Session:
         return Session(self.engine)
