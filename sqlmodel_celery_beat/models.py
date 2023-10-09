@@ -50,7 +50,7 @@ class ModelMixin(SQLModel):
         session.commit()
 
 
-class IntervalPeriod(Enum):
+class IntervalPeriod(str, Enum):
     """Enumeration of interval periods."""
 
     DAYS = "days"
@@ -70,6 +70,7 @@ class IntervalSchedule(ModelMixin, table=True):
         )
     )
 
+    periodic_task: Optional["PeriodicTask"] = Relationship(back_populates="interval")
     @property
     def schedule(self):
         return schedules.schedule(timedelta(**{self.period: self.every}), nowfun=nowfun)
@@ -78,7 +79,7 @@ class IntervalSchedule(ModelMixin, table=True):
         return f"every {self.every} {self.period}"
 
 
-class SolarEvent(Enum):
+class SolarEvent(str, Enum):
     """Enumeration of solar events."""
 
     SUNRISE = "sunrise"
@@ -105,6 +106,7 @@ class SolarSchedule(ModelMixin, table=True):
     )
     latitude: float
     longitude: float
+    periodic_task: Optional["PeriodicTask"] = Relationship(back_populates="solar")
 
     @validator("latitude")
     def validate_latitude(cls, v):
@@ -139,6 +141,7 @@ class ClockedSchedule(ModelMixin, table=True):
     clocked_time: datetime = Field(
         sa_column=sa.Column(sa.DateTime(timezone=True)), nullable=False
     )
+    periodic_task: Optional["PeriodicTask"] = Relationship(back_populates="clocked")
 
     def __str__(self):
         return f"{make_aware(self.clocked_time)}"
@@ -170,6 +173,7 @@ class CrontabSchedule(ModelMixin, table=True):
     day_of_week: str = Field(max_length=64, default="*")
     day_of_month: str = Field(max_length=31 * 4, default="*")
     month_of_year: str = Field(max_length=64, default="*")
+    periodic_task: Optional["PeriodicTask"] = Relationship(back_populates="crontab")
 
     @property
     def human_readable(self):
@@ -276,7 +280,7 @@ class PeriodicTask(ModelMixin, table=True):
     interval: Optional[IntervalSchedule] = Relationship(back_populates="periodic_task")
 
     crontab_id: Optional[int] = Field(default=None, foreign_key="crontabschedule.id")
-    cron: Optional[CrontabSchedule] = Relationship(back_populates="periodic_task")
+    crontab: Optional[CrontabSchedule] = Relationship(back_populates="periodic_task")
 
     solar_id: Optional[int] = Field(default=None, foreign_key="solarschedule.id")
     solar: Optional[SolarSchedule] = Relationship(back_populates="periodic_task")
@@ -379,6 +383,8 @@ class PeriodicTask(ModelMixin, table=True):
             return self.solar
         if self.clocked:
             return self.clocked
+        else:
+            raise ValueError("No schedule found")
 
     @property
     def schedule(self):

@@ -4,7 +4,7 @@ import datetime
 import logging
 import math
 from multiprocessing.util import Finalize
-from sqlmodel import create_engine
+from sqlmodel import SQLModel, create_engine, select
 
 from celery import Celery, current_app, schedules
 from celery.beat import ScheduleEntry, Scheduler
@@ -47,7 +47,7 @@ class ModelEntry(ScheduleEntry):
     )
     save_fields = ["last_run_at", "total_run_count", "no_changes"]
 
-    def __init__(self, model: PeriodicTask, app=None):
+    def __init__(self, model: PeriodicTask, app=None, session_func=None):
         """Initialize the model entry."""
         self.app = app or current_app._get_current_object()
         self.name = model.name
@@ -92,13 +92,15 @@ class ModelEntry(ScheduleEntry):
                 )
 
         self.last_run_at = model.last_run_at
+        self.session_func = session_func
 
-    def _disable(self, model: PeriodicTask, session: Session):
-        model.no_changes = True
-        model.enabled = False
-        model.save(session=session)
+    def _disable(self, model: PeriodicTask):
+        with self.session_func() as session:
+            model.enabled = False
+            model.no_changes = False
+            model.save(session=session)
 
-    def is_due(self, session: Session) -> schedules.schedstate:
+    def is_due(self) -> schedules.schedstate:
         if not self.model.enabled:
             # 5 second delay for re-enable.
             return schedules.schedstate(False, 5.0)
@@ -117,12 +119,13 @@ class ModelEntry(ScheduleEntry):
 
         # ONE OFF TASK: Disable one off tasks after they've ran once
         if self.model.one_off and self.model.enabled and self.model.total_run_count > 0:
-            self.model.enabled = False
-            self.model.total_run_count = 0  # Reset
-            self.model.no_changes = False  # Mark the model entry as changed
-            self.model.save(session=session)
-            # Don't recheck
-            return schedules.schedstate(False, NEVER_CHECK_TIMEOUT)
+            with self.session_func() as session:
+                self.model.enabled = False
+                self.model.total_run_count = 0  # Reset
+                self.model.no_changes = False  # Mark the model entry as changed
+                self.model.save(session=session)
+                # Don't recheck
+                return schedules.schedstate(False, NEVER_CHECK_TIMEOUT)
 
         # CAUTION: make_aware assumes settings.TIME_ZONE for naive datetimes,
         # while maybe_make_aware assumes utc for naive datetimes
@@ -195,10 +198,18 @@ class DatabaseScheduler(Scheduler):
     _last_timestamp = None
     _initial_read = True
     _heap_invalidated = False
+    _database_initialized = False
 
     def __init__(self, dburi: str | None = None, *args, **kwargs):
         """Initialize the database scheduler."""
         self._dirty = set()
+        # DB handling
+        self.app = kwargs.get("app") or current_app._get_current_object()
+        self.dburi = dburi or self.app.conf.beat_dburi
+        self.engine = create_engine(self.dburi)
+        if not self._database_initialized:
+            self._database_initialized = True
+            SQLModel.metadata.create_all(self.engine)
         Scheduler.__init__(self, *args, **kwargs)
         self._finalize = Finalize(self, self.sync, exitpriority=5)
         self.max_interval = (
@@ -206,27 +217,26 @@ class DatabaseScheduler(Scheduler):
             or self.app.conf.beat_max_loop_interval
             or DEFAULT_MAX_INTERVAL
         )
-        self.dburi = dburi or self.app.conf.beat_dburi
-        self.engine = create_engine(self.dburi)
-
 
     def get_session(self) -> Session:
         return Session(self.engine)
+
+    def _get_session_func(self):
+        return self.get_session
 
     def setup_schedule(self):
         self.install_default_entries(self.schedule)
         self.update_from_dict(self.app.conf.beat_schedule)
 
-    def all_as_schedule(self, session: Session) -> dict[str, ModelEntry]:
+    def all_as_schedule(self) -> dict[str, ModelEntry]:
         logging.debug("DatabaseScheduler: Fetching database schedule")
-        if not session:
-            session = self.get_session()
         s = {}
-        for model in session.query(PeriodicTask).filter_by(enabled=True):
-            try:
-                s[model.name] = ModelEntry(model, app=self.app)
-            except ValueError:
-                pass
+        with self.get_session() as session:
+            for model in session.exec(select(PeriodicTask).where(PeriodicTask.enabled==True)).all():
+                try:
+                    s[model.name] = ModelEntry(model, app=self.app, session_func=self._get_session_func())
+                except ValueError:
+                    pass
         return s
 
     def schedule_changed(self):
@@ -259,7 +269,9 @@ class DatabaseScheduler(Scheduler):
         s = {}
         for name, entry_fields in mapping.items():
             try:
-                entry = ModelEntry.from_entry(name, app=self.app, **entry_fields)
+                entry = ModelEntry.from_entry(
+                    name, session=self.get_session(), app=self.app, **entry_fields
+                )
                 if entry.model.enabled:
                     s[name] = entry
 
@@ -270,14 +282,18 @@ class DatabaseScheduler(Scheduler):
     def install_default_entries(self, data):
         entries = {}
         if self.app.conf.result_expires:
-            entries.setdefault(
-                "celery.backend_cleanup",
-                {
-                    "task": "celery.backend_cleanup",
-                    "schedule": schedules.crontab("0", "4", "*"),
-                    "options": {"expire_seconds": 12 * 3600},
-                },
-            )
+            # Check if celery.backend_cleanup is not already in the schedule,
+            if not self.get_session().exec(
+                select(PeriodicTask).where(PeriodicTask.name=="celery.backend_cleanup")
+            ).first():
+                entries.setdefault(
+                    "celery.backend_cleanup",
+                    {
+                        "task": "celery.backend_cleanup",
+                        "schedule": schedules.crontab("0", "4", "*"),
+                        "options": {"expire_seconds": 12 * 3600},
+                    },
+                )
         self.update_from_dict(entries)
 
     def schedules_equal(self, *args, **kwargs):
