@@ -10,12 +10,12 @@ from cron_descriptor import (
 from pydantic import ValidationError, root_validator, validator
 import sqlalchemy as sa
 from sqlmodel import Relationship, SQLModel, Field, Session, select
-from celery.schedules import schedules
+from celery import schedules
 from datetime import timedelta, datetime
-from sqlmodel_celery_beat.clockedschedule import clocked
-from sqlmodel_celery_beat.tzcrontab import TzAwareCrontab
+from .clockedschedule import clocked
+from .tzcrontab import TzAwareCrontab
 
-from util import nowfun, make_aware
+from .util import nowfun, make_aware
 
 
 def cronexp(field: str) -> str:
@@ -26,7 +26,7 @@ def cronexp(field: str) -> str:
 class ModelMixin(SQLModel):
     """Base model mixin"""
 
-    id = Field(int, primary_key=True)
+    id: int = Field(primary_key=True)
     created_at: datetime = Field(
         sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
         default=nowfun(),
@@ -312,7 +312,7 @@ class PeriodicTask(ModelMixin, table=True):
     no_changes: bool = False
 
     @root_validator
-    def validate_unique(cls, values: dict, **kwargs):
+    def validate_unique(cls, values: dict):
 
         schedule_types = ['interval', 'crontab', 'solar', 'clocked']
         selected_schedule_types = [s for s in schedule_types

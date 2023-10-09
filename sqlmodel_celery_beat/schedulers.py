@@ -20,10 +20,10 @@ from .models import (
     CrontabSchedule,
     IntervalSchedule,
     PeriodicTask,
-    PeriodicTasks,
+    PeriodicTasksChanged,
     SolarSchedule,
 )
-from .util import NEVER_CHECK_TIMEOUT
+from .util import NEVER_CHECK_TIMEOUT, nowfun
 import logging
 
 # This scheduler must wake up more frequently than the
@@ -152,7 +152,7 @@ class ModelEntry(ScheduleEntry):
         session.commit()
 
     @classmethod
-    def to_model_schedule(cls, schedule: schedules.Schedule, session: Session):
+    def to_model_schedule(cls, schedule: schedules.schedule, session: Session):
         for schedule_type, model_type, model_field in cls.model_schedules:
             schedule = schedules.maybe_schedule(schedule)
             if isinstance(schedule, schedule_type):
