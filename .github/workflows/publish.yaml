@@ -2,7 +2,7 @@ name: Build and publish python package
 
 on:
   release:
-
+    types: [published]
 jobs:
   publish-service-client-package:
     runs-on: ubuntu-latest
@@ -16,3 +16,4 @@ jobs:
           PYTHON_VERSION: "3.10"
           ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PUBLISH_REGISTRY_PASSWORD: ${{ secrets.PYPI_TOKEN}}
+          BRANCH: main
