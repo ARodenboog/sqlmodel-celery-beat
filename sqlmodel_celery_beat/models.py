@@ -396,7 +396,7 @@ class PeriodicTask(ModelMixin, table=True):
         if self.clocked:
             return self.clocked
         else:
-            raise ValueError("No schedule found")
+            raise ValueError("No scheduler found")
 
     @property
     def schedule(self):
