@@ -2,7 +2,7 @@
 name = "sqlmodel-celery-beat"
 version = "0.1.2"
 description = "A SQLModel based scheduler for Celery"
-authors = ["Your Name <you@example.com>"]
+authors = ["Alfred Rodenboog De Haas"]
 license = "MIT"
 readme = "README.md"
 packages = [{include = "sqlmodel_celery_beat"}]
