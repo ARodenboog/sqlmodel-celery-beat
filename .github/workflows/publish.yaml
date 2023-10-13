@@ -13,7 +13,8 @@ jobs:
         uses: code-specialist/pypi-poetry-publish@v1
         with:
           PACKAGE_DIRECTORY: "./sqlmodel_celery_beat/"
+          POETRY_VERSION: "1.6.1"
           PYTHON_VERSION: "3.10"
           ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PUBLISH_REGISTRY_PASSWORD: ${{ secrets.PYPI_TOKEN}}
-          BRANCH: main
+          BRANCH: "main"
