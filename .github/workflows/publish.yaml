@@ -14,6 +14,7 @@ jobs:
         with:
           PACKAGE_DIRECTORY: "./sqlmodel_celery_beat/"
           POETRY_VERSION: "1.6.1"
+          POETRY_CORE_VERSION: "1.7.0"
           PYTHON_VERSION: "3.10"
           ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PUBLISH_REGISTRY_PASSWORD: ${{ secrets.PYPI_TOKEN}}
