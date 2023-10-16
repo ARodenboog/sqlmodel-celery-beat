@@ -311,6 +311,14 @@ class PeriodicTask(ModelMixin, table=True):
     clocked_id: Optional[int] = Field(default=None, foreign_key="clockedschedule.id")
     clocked: Optional[ClockedSchedule] = Relationship(back_populates="periodic_task")
 
+    # These are JSON fields, so we can store any serializable data
+    # For querying, we can use the JSON operators in SQLAlchemy
+    # https://docs.sqlalchemy.org/en/14/dialects/postgresql.html#json-jsonb
+    # Example:
+    # .where(PeriodicTask.args.op("->>")(0).cast(Integer)== your_var)
+    # This compares the first element of the args JSON array to your_var
+    # It is important to set execution_options(synchronize_session="fetch")
+    # This ensures the casts are done on the DB side, not the Python side
     args: list = Field(sa_column=sa.Column(sa.JSON, nullable=False), default_factory=list)
     kwargs: dict = Field(sa_column=sa.Column(sa.JSON, nullable=False), default_factory=dict)
 
