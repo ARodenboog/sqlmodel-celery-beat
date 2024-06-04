@@ -10,6 +10,7 @@ from cron_descriptor import (
 )
 from pydantic import ValidationError, root_validator, validator
 import sqlalchemy as sa
+from sqlalchemy import TIMESTAMP
 from sqlalchemy.event import listen
 from sqlmodel import Relationship, SQLModel, Field, Session, select
 from celery import schedules
@@ -30,11 +31,11 @@ class ModelMixin(SQLModel):
 
     id: int = Field(primary_key=True)
     created_at: datetime = Field(
-        sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+        sa_type=TIMESTAMP(timezone=True),
         default=nowfun(),
     )
     updated_at: datetime = Field(
-        sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+        sa_type=TIMESTAMP(timezone=True),
         default_factory=nowfun,
     )
 
