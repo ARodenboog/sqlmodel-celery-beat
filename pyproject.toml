@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "sqlmodel-celery-beat"
-version = "0.2.3"
+version = "0.2.4"
 description = "A SQLModel based scheduler for Celery"
 authors = ["Alfred Rodenboog De Haas"]
 license = "MIT"
@@ -10,7 +10,7 @@ packages = [{include = "sqlmodel_celery_beat"}]
 [tool.poetry.dependencies]
 python = "^3.10"
 celery = "^5.3.1"
-sqlmodel = "^0.0.8"
+sqlmodel = "^0.0.19"
 psycopg2-binary = "^2.9.6"
 cron-descriptor = "^1.4.0"
 
