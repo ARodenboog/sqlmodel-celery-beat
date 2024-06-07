@@ -8,7 +8,7 @@ from cron_descriptor import (
     WrongArgumentException,
     get_description,
 )
-from pydantic import ValidationError, root_validator, validator
+from pydantic import ValidationError, model_validator, validator
 import sqlalchemy as sa
 from sqlalchemy import TIMESTAMP
 from sqlalchemy.event import listen
@@ -347,8 +347,8 @@ class PeriodicTask(ModelMixin, table=True):
 
     no_changes: bool = True
 
-    @root_validator
-    def validate_unique(cls, values: dict):
+    @model_validator(mode='before')
+    def validate_unique(cls, values: dict)-> dict:
 
         schedule_types = ['interval', 'crontab', 'solar', 'clocked']
         selected_schedule_types = [s for s in schedule_types
@@ -376,6 +376,7 @@ class PeriodicTask(ModelMixin, table=True):
             raise ValidationError(
                 'Only one can be set, in expires and expire_seconds'
             )
+        return values
 
 
     @property
