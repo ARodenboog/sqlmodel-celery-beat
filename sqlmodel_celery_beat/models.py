@@ -142,7 +142,7 @@ class ClockedSchedule(ModelMixin, table=True):
     """Clocked schedule, run once at a specific time."""
 
     clocked_time: datetime = Field(
-        sa_column=sa.Column(sa.DateTime(timezone=True)), nullable=False
+        sa_type=TIMESTAMP(timezone=True), nullable=False
     )
     periodic_task: Optional["PeriodicTask"] = Relationship(back_populates="clocked")
 
@@ -332,15 +332,15 @@ class PeriodicTask(ModelMixin, table=True):
     routing_key: Optional[str] = Field(max_length=200, nullable=True)
     headers: Optional[dict] = Field(sa_column=sa.Column(sa.JSON, nullable=False), default_factory=dict)
     priority: Optional[int] = Field(default=None, nullable=True)
-    expires: Optional[datetime] = Field(sa_column=sa.Column(sa.DateTime(timezone=True)), nullable=True)
+    expires: Optional[datetime] = Field(sa_type=TIMESTAMP(timezone=True), nullable=True)
     expire_seconds: Optional[int] = Field(default=None, nullable=True)
     one_off: bool = Field(default=False)
-    start_time: Optional[datetime] = Field(sa_column=sa.Column(sa.DateTime(timezone=True)), nullable=True)
+    start_time: Optional[datetime] = Field(sa_type=TIMESTAMP(timezone=True), nullable=True)
     enabled: bool = Field(default=True)
-    last_run_at: Optional[datetime] = Field(sa_column=sa.Column(sa.DateTime(timezone=True)), nullable=True)
+    last_run_at: Optional[datetime] = Field(sa_type=TIMESTAMP(timezone=True), nullable=True)
     total_run_count: int = Field(default=0, nullable=False)
     date_changed: datetime = Field(
-        sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+        sa_type=TIMESTAMP(timezone=True), nullable=True,
         default=nowfun(),
     )
     description: str = Field(max_length=200, nullable=True)
