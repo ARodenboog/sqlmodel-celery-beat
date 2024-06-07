@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "sqlmodel-celery-beat"
-version = "0.2.6"
+version = "0.2.7"
 description = "A SQLModel based scheduler for Celery"
 authors = ["Alfred Rodenboog De Haas"]
 license = "MIT"
